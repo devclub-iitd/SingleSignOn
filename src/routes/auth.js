@@ -1,6 +1,8 @@
 import express from 'express';
 import { verify, decode } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import rtoken from '../data/resourceToken';
+import * as keys from '../config/keys';
 import {
     verifyToken,
     createJWTCookie,
@@ -8,6 +10,8 @@ import {
     sendVerificationEmail,
     sendPassResetEmail,
     linkSocial,
+    makeid,
+    sendRequestToken,
 } from '../utils/utils';
 import {
     accessTokenName,
@@ -167,8 +171,6 @@ router.post('/password/reset', async (req, res) => {
         });
     }
 });
-
-export default router;
 
 router.get('/google', (req, res, next) => {
     passport.authenticate('google', {
@@ -388,3 +390,34 @@ router.post(`/sudoTestCommand/:secret/makeadminforclient`, async (req, res) => {
         });
     }
 });
+
+router.post('/requestToken', async (req, res) => {
+    try {
+        const { q } = req.body;
+        const { clientId } = decode(q);
+        const client = await Client.findById(clientId);
+
+        if (!client) {
+            return res.status(400).json({
+                err: true,
+                msg: 'No client found',
+            });
+        }
+
+        verify(q, client.access_token, {
+            algorithms: ['HS256'],
+        });
+        const requestToken = makeid(64, true);
+        rtoken.hmset(requestToken.toString(), { cId: clientId });
+        rtoken.expire(requestToken.toString(), keys.reqExpTime);
+        sendRequestToken(requestToken, res);
+    } catch (error) {
+        console.log(error);
+        return res.status(401).json({
+            err: true,
+            msg: 'Unauthorized Client',
+        });
+    }
+});
+
+export default router;

@@ -339,6 +339,20 @@ const linkSocial = async (token, provider, uid, email, done) => {
     return done(null, primary_account);
 };
 
+const sendRequestToken = (reqToken, res) => {
+    const payload = {
+        request_token: reqToken,
+    };
+
+    const token = jwt.sign(payload, keys.privateKey, {
+        expiresIn: keys.reqExpTime,
+        algorithm: 'RS256',
+    });
+
+    res.send(token);
+    return token;
+};
+
 export {
     makeid,
     createJWTCookie,
@@ -351,4 +365,5 @@ export {
     sendVerificationEmail,
     sendPassResetEmail,
     addRoles,
+    sendRequestToken,
 };

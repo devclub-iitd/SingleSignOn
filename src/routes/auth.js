@@ -1,6 +1,8 @@
 import express from 'express';
 import { verify, decode } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import rtoken from '../data/resourceToken';
+import * as keys from '../config/keys';
 import {
     verifyToken,
     createJWTCookie,
@@ -8,6 +10,8 @@ import {
     sendVerificationEmail,
     sendPassResetEmail,
     linkSocial,
+    makeid,
+    getRequestToken,
 } from '../utils/utils';
 import {
     accessTokenName,
@@ -167,8 +171,6 @@ router.post('/password/reset', async (req, res) => {
         });
     }
 });
-
-export default router;
 
 router.get('/google', (req, res, next) => {
     passport.authenticate('google', {
@@ -388,3 +390,50 @@ router.post(`/sudoTestCommand/:secret/makeadminforclient`, async (req, res) => {
         });
     }
 });
+
+router.post('/requestToken', async (req, res) => {
+    try {
+        const { jwt } = req.body;
+        const { clientId } = decode(jwt);
+        const client = await Client.findById(clientId);
+
+        if (!client) {
+            return res.status(400).json({
+                err: true,
+                msg: 'No client found',
+            });
+        }
+
+        verify(jwt, client.access_token, {
+            algorithms: ['HS256'],
+        });
+        let requestToken = makeid(64, true);
+        let alreadyExists = false;
+        do {
+            let tokenAlreadyExists = false;
+            rtoken.exists(requestToken.toString(), (_err, exists) => {
+                if (exists === 1) {
+                    tokenAlreadyExists = true;
+                }
+            });
+            if (tokenAlreadyExists) {
+                requestToken = makeid(64, true);
+                alreadyExists = true;
+            } else {
+                alreadyExists = false;
+            }
+        } while (alreadyExists);
+        rtoken.hmset(requestToken.toString(), { cId: clientId });
+        rtoken.expire(requestToken.toString(), keys.reqExpTime);
+        const token = getRequestToken(requestToken);
+        res.send(token);
+    } catch (error) {
+        console.log(error);
+        return res.status(401).json({
+            err: true,
+            msg: 'Unauthorized Client',
+        });
+    }
+});
+
+export default router;
